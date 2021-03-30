@@ -5,6 +5,7 @@ import math
 import win32api
 import win32con
 import PySimpleGUI as sg
+import threading
 
 VK_CODE = {
            'a':0x41,
@@ -48,12 +49,13 @@ def shift(semitone = 0):
 def read(file):
     global pattern
     global sleep
+    global bpm
     pattern = midi.read_midifile(file)
     for x in pattern:
         for y in x:
             if type(y) == midi.SetTempoEvent:
-                sleep = (60 * 1000000 / y.get_bpm() / 1000000.0 / 50)
-                return
+                bpm.update(60000/(y.get_bpm()*y.get_mpqn()))
+                return;
 
 def find_scroll_time(channel = 0):
     global t
@@ -76,16 +78,34 @@ def add_pattern(channel = 0):
            Ttime += x.tick
 
 #len(pattern)
-def play():
-    global scroll
-    global sleep
+def play(scroll,playblackkey,bpm):
+    time.sleep(3)
+    print("playing")
+    global stopthread
+    print(bpm)
+    sleep =  float(bpm.split(".")[0]) / 100000
     for x in scroll:
+        if(stopthread):
+            stopthread = False
+            return
+        if x != []:
+            print(x)
+        key_pressed = []
         for y in x:
             if str(y) in white_key:
                 key = white_key[str(y)]
                 if key != None:
                     win32api.keybd_event(VK_CODE[key],0,0,0)
-                    win32api.keybd_event(VK_CODE[key],0 ,win32con.KEYEVENTF_KEYUP ,0)
+                    key_pressed.append(key)
+            elif playblackkey and str(y) in black_key:
+                key = black_key[str(y)]
+                if key != None:
+                    win32api.keybd_event(VK_CODE[key],0,0,0)
+                    key_pressed.append(key)
+
+            for key in key_pressed:
+                win32api.keybd_event(VK_CODE[key],0 ,win32con.KEYEVENTF_KEYUP ,0)
+                pass
         time.sleep(sleep)
 
 
@@ -94,26 +114,36 @@ scroll = []
 t = 0
 pattern = []
 sleep = 100
+t1 = None
 
+
+
+button = sg.Button("PLAY")
+bpm = sg.InputText('0',size=(15, 1))
 
 layout =  [[sg.In() ,sg.FileBrowse(file_types=(("Midi", "*.mid"),))],
-            [sg.Button("COMPUTE"),sg.Text('Semitone shift'),sg.InputText('0',size=(2, 1))],[sg.Button("PLAY")],
-            [sg.Text('Made by: TENTEN youtube.com/c/TenTenGaming/')]
-            #[sg.Text('BPM override'),sg.InputText('0',size=(3, 1)),sg.Button("OVERRIDE")]
+            [sg.Button("COMPUTE"),sg.Text('Semitone shift'),sg.InputText('0',size=(2, 1))],[button ],
+            [sg.Text('Made by: TENTEN youtube.com/c/TenTenGaming/')],
+            [sg.Checkbox('Play blackkey as whitekey above', default=False)],
+            [sg.Text('SPEED override'),bpm],
+            [sg.Image('venti.png')],
             ]
 # Create the window
 window = sg.Window("Tenten Genshin Lyre player", layout)
 
-
+#thread stopping bool
+stopthread = False
+playing = False
 while True:
     event, values = window.read()
     # End program if user closes window or
     # presses the OK button
+
     if(values['Browse'] != ""):
         pattern = []
         read(values['Browse'])
     #if(event == "OVERRIDE"):
-    #    sleep = (60 * 1000000 / values[2] / 1000000.0 / 200)
+    #sleep = (60 * 1000000 / 200/ 1000000.0 / 200)
     if(event == "COMPUTE"):
         t = 0
         for i in range(len(pattern)):
@@ -122,12 +152,21 @@ while True:
         for i in range(len(pattern)):
             add_pattern(i)
         print("done computing")
-    if(event == "PLAY"):
-        shift(int(values[1]))
-        time.sleep(3)
-        play()
+    elif(event == "PLAY"):
+        if(not playing):
+            playing = True
+            if(int(values[1]) != 0):
+                shift(int(values[1]))
+            print(sleep)
+            t1 = threading.Thread(target=play , args = (scroll,values[2],values[3])).start()
+            button.update("stop")
+        else:
+            stopthread = True
+            button.update("play")
+            playing = False
 
-    if event == sg.WIN_CLOSED:
+
+    elif event == sg.WIN_CLOSED:
         break
 
 window.close()
