@@ -41,6 +41,7 @@ black_key = {'49': 'x', '51': 'c', '54': 'b', '56':'n' , '58':'m', '61' : 'a', '
 
 def shift(semitone = 0):
     global white_key;
+    global black_key;
     new_map = {}
     for key,value in white_key.items():
     	new_map[str(int(key)+semitone)] = value;
